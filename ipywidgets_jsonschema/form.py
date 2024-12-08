@@ -7,12 +7,15 @@ from packaging import version
 import collections
 import ipywidgets
 import jsonschema
-from jsonschema.validators import Draft7Validator
+from jsonschema.validators import Draft202012Validator
 import json
 import os
-import re
+import re   
 import traitlets
 import collections.abc
+
+
+
 
 # We are providing some compatibility for ipywidgets v7 and v8
 IS_VERSION_8 = version.parse(ipywidgets.__version__).major == 8
@@ -21,7 +24,9 @@ IS_VERSION_8 = version.parse(ipywidgets.__version__).major == 8
 # JSONSchema standard supports:
 # https://json-schema.org/understanding-json-schema/reference/string#built-in-formats
 SUPPORTED_FORMATS_VERSION_7 = []
-SUPPORTED_FORMATS_VERSION_8 = ["date-time", "time", "date"]
+SUPPORTED_FORMATS_VERSION_8 = ["date-time", "time", "date", "email", "idn-email","hostname", "idn-hostname", "ipv4", "ipv6", "uri", "iri", "uuid"]
+
+
 
 
 class FormError(Exception):
@@ -39,7 +44,6 @@ def as_tuple(obj):
         return obj
     else:
         return (obj,)
-
 
 def minmax_schema_rule(widget, schema):
     """This implements the minimum/maximum rules
@@ -63,11 +67,11 @@ def minmax_schema_rule(widget, schema):
             def _create_handler(r, op, minmax):
                 def _handler(change):
                     if op(widget.value, minmax):
+                        
                         if r.startswith("exclusive"):
                             widget.value = change["old"]
                         else:
                             widget.value = minmax
-
                 return _handler
 
             widget.observe(_create_handler(rule, operator, schema[rule]), names="value")
@@ -116,7 +120,7 @@ class Form:
             the built-in sorted, but is no-op if sorted raises a TypeError.
         """
         # Make sure that the given schema is valid
-        Draft7Validator.check_schema(schema)
+        Draft202012Validator.check_schema(schema)
 
         # Store the given data members
         self.schema = schema
@@ -173,6 +177,7 @@ class Form:
         )
         display(w)
 
+
     @property
     def data(self):
         """Get a (non-updating) snapshot of the current form data
@@ -228,7 +233,6 @@ class Form:
                 not IS_VERSION_8 and format_ in SUPPORTED_FORMATS_VERSION_7
             ):
                 type_ = format_.replace("-", "_")
-
         return getattr(self, f"_construct_{type_}")(schema, label=label, root=root)
 
     def _wrap_accordion(self, widget_list, schema, label=None):
@@ -394,10 +398,10 @@ class Form:
             register_observer=_register_observer,
         )
 
-    def _construct_simple(self, schema, widget, label=None, root=False):
+    def     _construct_simple(self, schema, widget, label=None, root=False):
         # Extract the best description that we have
         tooltip = schema.get("description", None)
-
+      
         # Construct the label widget that describes the input
         box = [widget]
         if label is not None or "title" in schema:
@@ -434,7 +438,7 @@ class Form:
             # Try matching the given data against the pattern
             pattern = schema.get("pattern", ".*")
             return re.fullmatch(pattern, val)
-
+        
         # Describe how change handlers are registered
         def _register_observer(h, n, t):
             widget.observe(h, names=n, type=t)
@@ -472,8 +476,9 @@ class Form:
         _resetter()
 
         # Make sure the widget adapts to the outer layout
+        
         widget.layout = ipywidgets.Layout(width="100%")
-
+        
         # Make the placing of labels optional
         box_type = ipywidgets.HBox
         if self.vertically_place_labels:
@@ -481,6 +486,9 @@ class Form:
 
         box = box_type(box, layout=ipywidgets.Layout(width="100%"))
         box = self._wrap_description(box, tooltip)
+
+
+      
 
         return self.construct_element(
             getter=_getter,
@@ -492,6 +500,7 @@ class Form:
 
     def _construct_string(self, schema, label=None, root=False):
         return self._construct_simple(schema, ipywidgets.Text(), label=label)
+
 
     def _construct_date_time(self, schema, label=None, root=False):
         widget = ipywidgets.DatetimePicker()
@@ -514,6 +523,7 @@ class Form:
         # Make sure that the widget shows the tooltip
         if tooltip is not None:
             widget.tooltip = tooltip
+
 
         def _register_observer(h, n, t):
             widget.observe(h, names=n, type=t)
@@ -618,6 +628,7 @@ class Form:
         )
 
     def _construct_time(self, schema, label=None, root=False):
+
         widget = ipywidgets.TimePicker()
 
         # Extract the best description that we have
@@ -679,6 +690,533 @@ class Form:
             register_observer=_register_observer,
         )
 
+
+
+    def _construct_email(self, schema, label=None, root=False): 
+        #TODO: find robust regex that supports "normal" emails and idn-emails
+        EMAIL_REGEX = r"^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$" 
+        widget = ipywidgets.Text()
+        # Extract the best description that we have
+        tooltip = schema.get("description", None)
+
+         # Construct the label widget that describes the input
+        box = [widget]
+        if label is not None or "title" in schema:
+            # Extract the best guess for a title that we have
+            title = schema.get("title", label)
+
+            # Use the label as the backup tooltip
+            if tooltip is None:
+                tooltip = title
+
+            widget.description = title
+
+
+        def _validate_email(email):
+            if re.fullmatch(EMAIL_REGEX, email):
+                return True
+            return False
+
+        # Make sure that the widget shows the tooltip
+        if tooltip is not None:
+            widget.tooltip = tooltip
+
+        def _register_observer(h, n, t):
+            widget.observe(h, names=n, type=t)
+
+        def _setter(_d):
+            print(_d)
+            if _validate_email(_d):
+                widget.value = _d
+            else:
+                raise FormError(f"Value '{_d}' is not a valid email address")
+
+        def _resetter():
+            # Apply a potential default
+            if "default" in schema:
+                widget.value = schema["default"]
+            else:
+                widget.value = ""
+
+        def _getter():
+            if not _validate_email(widget.value):
+                raise FormError(f"Value '{widget.value}' is not a valid email address")
+            return widget.value
+
+        # Trigger generation of defaults in construction
+        _resetter()
+
+        # Make sure the widget adapts to the outer layout
+        widget.layout = ipywidgets.Layout(width="100%")
+
+        # Make the placing of labels optional
+        box_type = ipywidgets.HBox
+        if self.vertically_place_labels:
+            box_type = ipywidgets.VBox
+
+        box = box_type(box, layout=ipywidgets.Layout(width="100%"))
+        box = self._wrap_description(box, tooltip)
+
+        return self.construct_element(
+            getter=_getter,
+            setter=_setter,
+            resetter=_resetter,
+            widgets=[box],
+            register_observer=_register_observer,
+        )
+
+    def _construct_idn_email(self, schema, label=None, root=False):
+        # All strings valid agains 'email' are also valid against 'idn-email'
+        return self._construct_email(schema, label=None, root=False)
+    
+    def _construct_hostname(self, schema, label=None, root=False):
+        HOSTNAME_REGEX = "^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$"
+        widget = ipywidgets.Text()
+        # Extract the best description that we have
+        tooltip = schema.get("description", None)
+
+         # Construct the label widget that describes the input
+        box = [widget]
+        if label is not None or "title" in schema:
+            # Extract the best guess for a title that we have
+            title = schema.get("title", label)
+
+            # Use the label as the backup tooltip
+            if tooltip is None:
+                tooltip = title
+
+            widget.description = title
+
+
+        def _validate_hostname(val):
+            if re.fullmatch(HOSTNAME_REGEX, val):
+                return True
+            return False
+
+        # Make sure that the widget shows the tooltip
+        if tooltip is not None:
+            widget.tooltip = tooltip
+
+        def _register_observer(h, n, t):
+            widget.observe(h, names=n, type=t)
+
+        def _setter(_d):
+            print(_d)
+            if _validate_hostname(_d):
+                widget.value = _d
+            else:
+                raise FormError(f"Value '{_d}' is not a valid hostname")
+
+        def _resetter():
+            # Apply a potential default
+            if "default" in schema:
+                widget.value = schema["default"]
+            else:
+                widget.value = ""
+
+        def _getter():
+            if not _validate_hostname(widget.value):
+                raise FormError(f"Value '{widget.value}' is not a valid hostname")
+            return widget.value
+
+        # Trigger generation of defaults in construction
+        _resetter()
+
+        # Make sure the widget adapts to the outer layout
+        widget.layout = ipywidgets.Layout(width="100%")
+
+        # Make the placing of labels optional
+        box_type = ipywidgets.HBox
+        if self.vertically_place_labels:
+            box_type = ipywidgets.VBox
+
+        box = box_type(box, layout=ipywidgets.Layout(width="100%"))
+        box = self._wrap_description(box, tooltip)
+
+        return self.construct_element(
+            getter=_getter,
+            setter=_setter,
+            resetter=_resetter,
+            widgets=[box],
+            register_observer=_register_observer,
+        )
+    
+    def _construct_idn_hostname(self, schema, label=None, root=False):
+        return self._construct_email(schema, label=None, root=False)
+    def _construct_ipv4(self, schema, label=None, root=False):
+        IPV4_REGEX = r"^(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
+        widget = ipywidgets.Text()
+        # Extract the best description that we have
+        tooltip = schema.get("description", None)
+
+         # Construct the label widget that describes the input
+        box = [widget]
+        if label is not None or "title" in schema:
+            # Extract the best guess for a title that we have
+            title = schema.get("title", label)
+
+            # Use the label as the backup tooltip
+            if tooltip is None:
+                tooltip = title
+
+            widget.description = title
+
+
+        def _validate_ipv4(ipv4):
+            if re.fullmatch(IPV4_REGEX, ipv4):
+                return True
+            return False
+
+        # Make sure that the widget shows the tooltip
+        if tooltip is not None:
+            widget.tooltip = tooltip
+
+        def _register_observer(h, n, t):
+            widget.observe(h, names=n, type=t)
+
+        def _setter(_d):
+            print(_d)
+            if _validate_ipv4(_d):
+                widget.value = _d
+            else:
+                raise FormError(f"Value '{_d}' is not a valid ipv4 address")
+
+        def _resetter():
+            # Apply a potential default
+            if "default" in schema:
+                widget.value = schema["default"]
+            else:
+                widget.value = ""
+
+        def _getter():
+            if not _validate_ipv4(widget.value):
+                raise FormError(f"Value '{widget.value}' is not a valid ipv4 address")
+            return widget.value
+
+        # Trigger generation of defaults in construction
+        _resetter()
+
+        # Make sure the widget adapts to the outer layout
+        widget.layout = ipywidgets.Layout(width="100%")
+
+        # Make the placing of labels optional
+        box_type = ipywidgets.HBox
+        if self.vertically_place_labels:
+            box_type = ipywidgets.VBox
+
+        box = box_type(box, layout=ipywidgets.Layout(width="100%"))
+        box = self._wrap_description(box, tooltip)
+
+        return self.construct_element(
+            getter=_getter,
+            setter=_setter,
+            resetter=_resetter,
+            widgets=[box],
+            register_observer=_register_observer,
+        )
+
+        
+    def _construct_ipv6(self, schema, label=None, root=False):
+        IPV6_REGEX = r"^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$"
+        widget = ipywidgets.Text()
+        # Extract the best description that we have
+        tooltip = schema.get("description", None)
+
+         # Construct the label widget that describes the input
+        box = [widget]
+        if label is not None or "title" in schema:
+            # Extract the best guess for a title that we have
+            title = schema.get("title", label)
+
+            # Use the label as the backup tooltip
+            if tooltip is None:
+                tooltip = title
+
+            widget.description = title
+
+
+        def _validate_ipv6(ipv6):
+            if re.fullmatch(IPV6_REGEX, ipv6):
+                return True
+            return False
+
+        # Make sure that the widget shows the tooltip
+        if tooltip is not None:
+            widget.tooltip = tooltip
+
+        def _register_observer(h, n, t):
+            widget.observe(h, names=n, type=t)
+
+        def _setter(_d):
+            print(_d)
+            if _validate_ipv6(_d):
+                widget.value = _d
+            else:
+                raise FormError(f"Value '{_d}' is not a valid ipv6 address")
+
+        def _resetter():
+            # Apply a potential default
+            if "default" in schema:
+                widget.value = schema["default"]
+            else:
+                widget.value = ""
+
+        def _getter():
+            if not _validate_ipv6(widget.value):
+                raise FormError(f"Value '{widget.value}' is not a valid ipv6 address")
+            return widget.value
+
+        # Trigger generation of defaults in construction
+        _resetter()
+
+        # Make sure the widget adapts to the outer layout
+        widget.layout = ipywidgets.Layout(width="100%")
+
+        # Make the placing of labels optional
+        box_type = ipywidgets.HBox
+        if self.vertically_place_labels:
+            box_type = ipywidgets.VBox
+
+        box = box_type(box, layout=ipywidgets.Layout(width="100%"))
+        box = self._wrap_description(box, tooltip)
+
+        return self.construct_element(
+            getter=_getter,
+            setter=_setter,
+            resetter=_resetter,
+            widgets=[box],
+            register_observer=_register_observer,
+        )
+
+
+    #TODO: Simplify: all URIs are valid IRIs
+    def _construct_uri(self, schema, label=None, root=False):
+        URI_REGEX_HTTP = r"^https?:\\/\\/(?:www\\.)?[-a-zA-Z0-9@:%._\\+~#=]{1,256}\\.[a-zA-Z0-9()]{1,6}\\b(?:[-a-zA-Z0-9()@:%_\\+.~#?&\\/=]*)$"
+        URI_REGEX_NOHTTP = r"^[-a-zA-Z0-9@:%._\\+~#=]{1,256}\\.[a-zA-Z0-9()]{1,6}\\b(?:[-a-zA-Z0-9()@:%_\\+.~#?&\\/=]*)$"
+        widget = ipywidgets.Text()
+        # Extract the best description that we have
+        tooltip = schema.get("description", None)
+
+         # Construct the label widget that describes the input
+        box = [widget]
+        if label is not None or "title" in schema:
+            # Extract the best guess for a title that we have
+            title = schema.get("title", label)
+
+            # Use the label as the backup tooltip
+            if tooltip is None:
+                tooltip = title
+
+            widget.description = title
+
+
+        def _validate_uri(val):
+            if re.fullmatch(URI_REGEX_HTTP, val) or re.fullmatch(URI_REGEX_NOHTTP, val):
+                return True
+            return False
+
+        # Make sure that the widget shows the tooltip
+        if tooltip is not None:
+            widget.tooltip = tooltip
+
+        def _register_observer(h, n, t):
+            widget.observe(h, names=n, type=t)
+
+        def _setter(_d):
+            print(_d)
+            if _validate_uri(_d):
+                widget.value = _d
+            else:
+                raise FormError(f"Value '{_d}' is not a valid URI")
+
+        def _resetter():
+            # Apply a potential default
+            if "default" in schema:
+                widget.value = schema["default"]
+            else:
+                widget.value = ""
+
+        def _getter():
+            if not _validate_uri(widget.value):
+                raise FormError(f"Value '{widget.value}' is not a valid URI")
+            return widget.value
+
+        # Trigger generation of defaults in construction
+        _resetter()
+
+        # Make sure the widget adapts to the outer layout
+        widget.layout = ipywidgets.Layout(width="100%")
+
+        # Make the placing of labels optional
+        box_type = ipywidgets.HBox
+        if self.vertically_place_labels:
+            box_type = ipywidgets.VBox
+
+        box = box_type(box, layout=ipywidgets.Layout(width="100%"))
+        box = self._wrap_description(box, tooltip)
+
+        return self.construct_element(
+            getter=_getter,
+            setter=_setter,
+            resetter=_resetter,
+            widgets=[box],
+            register_observer=_register_observer,
+        )
+    def _construct_iri(self, schema, label=None, root=False):
+        IRI_REGEX = r"""
+                    ^
+                    (?:[a-zA-Z][a-zA-Z0-9+.-]*):                              # Scheme
+                    (?://(?:[^\s/?#]*))?                                      # Authority (optional)
+                    (?:/[^\s?#]*)*                                            # Path
+                    (?:\?[^\s#]*)?                                            # Query (optional)
+                    (?:#[^\s]*)?                                              # Fragment (optional)
+                    $
+                    """
+        
+        widget = ipywidgets.Text()
+        # Extract the best description that we have
+        tooltip = schema.get("description", None)
+
+         # Construct the label widget that describes the input
+        box = [widget]
+        if label is not None or "title" in schema:
+            # Extract the best guess for a title that we have
+            title = schema.get("title", label)
+
+            # Use the label as the backup tooltip
+            if tooltip is None:
+                tooltip = title
+
+            widget.description = title
+
+
+        def _validate_iri(val):
+            if re.fullmatch(IRI_REGEX, val):
+                return True
+            return False
+
+        # Make sure that the widget shows the tooltip
+        if tooltip is not None:
+            widget.tooltip = tooltip
+
+        def _register_observer(h, n, t):
+            widget.observe(h, names=n, type=t)
+
+        def _setter(_d):
+            print(_d)
+            if _validate_iri(_d):
+                widget.value = _d
+            else:
+                raise FormError(f"Value '{_d}' is not a valid IRI")
+
+        def _resetter():
+            # Apply a potential default
+            if "default" in schema:
+                widget.value = schema["default"]
+            else:
+                widget.value = ""
+
+        def _getter():
+            if not _validate_iri(widget.value):
+                raise FormError(f"Value '{widget.value}' is not a valid IRI")
+            return widget.value
+
+        # Trigger generation of defaults in construction
+        _resetter()
+
+        # Make sure the widget adapts to the outer layout
+        widget.layout = ipywidgets.Layout(width="100%")
+
+        # Make the placing of labels optional
+        box_type = ipywidgets.HBox
+        if self.vertically_place_labels:
+            box_type = ipywidgets.VBox
+
+        box = box_type(box, layout=ipywidgets.Layout(width="100%"))
+        box = self._wrap_description(box, tooltip)
+
+        return self.construct_element(
+            getter=_getter,
+            setter=_setter,
+            resetter=_resetter,
+            widgets=[box],
+            register_observer=_register_observer,
+        )
+    
+    def _construct_uuid(self, schema, label=None, root=False):
+        UUID_REGEX = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        widget = ipywidgets.Text()
+        # Extract the best description that we have
+        tooltip = schema.get("description", None)
+
+         # Construct the label widget that describes the input
+        box = [widget]
+        if label is not None or "title" in schema:
+            # Extract the best guess for a title that we have
+            title = schema.get("title", label)
+
+            # Use the label as the backup tooltip
+            if tooltip is None:
+                tooltip = title
+
+            widget.description = title
+
+
+        def _validate_uuid(val):
+            if re.fullmatch(UUID_REGEX, val):
+                return True
+            return False
+
+        # Make sure that the widget shows the tooltip
+        if tooltip is not None:
+            widget.tooltip = tooltip
+
+        def _register_observer(h, n, t):
+            widget.observe(h, names=n, type=t)
+
+        def _setter(_d):
+            print(_d)
+            if _validate_uuid(_d):
+                widget.value = _d
+            else:
+                raise FormError(f"Value '{_d}' is not a valid uuid")
+
+        def _resetter():
+            # Apply a potential default
+            if "default" in schema:
+                widget.value = schema["default"]
+            else:
+                widget.value = ""
+
+        def _getter():
+            if not _validate_uuid(widget.value):
+                raise FormError(f"Value '{widget.value}' is not a valid uuid")
+            return widget.value
+
+        # Trigger generation of defaults in construction
+        _resetter()
+
+        # Make sure the widget adapts to the outer layout
+        widget.layout = ipywidgets.Layout(width="100%")
+
+        # Make the placing of labels optional
+        box_type = ipywidgets.HBox
+        if self.vertically_place_labels:
+            box_type = ipywidgets.VBox
+
+        box = box_type(box, layout=ipywidgets.Layout(width="100%"))
+        box = self._wrap_description(box, tooltip)
+
+        return self.construct_element(
+            getter=_getter,
+            setter=_setter,
+            resetter=_resetter,
+            widgets=[box],
+            register_observer=_register_observer,
+        )
+    
+
+    
     def _construct_number(self, schema, label=None, root=False):
         kwargs = dict()
         if "multipleOf" in schema:
