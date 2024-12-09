@@ -398,7 +398,7 @@ class Form:
             register_observer=_register_observer,
         )
 
-    def     _construct_simple(self, schema, widget, label=None, root=False):
+    def _construct_simple(self, schema, widget, label=None, root=False):
         # Extract the best description that we have
         tooltip = schema.get("description", None)
       
@@ -694,12 +694,12 @@ class Form:
 
     def _construct_email(self, schema, label=None, root=False): 
         #TODO: find robust regex that supports "normal" emails and idn-emails
-        EMAIL_REGEX = r"^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$" 
+        EMAIL_REGEX = r'^[a-z0-9]+[\._]?[a-z0-9]+[@]\w+[.]\w+$'
         widget = ipywidgets.Text()
         # Extract the best description that we have
         tooltip = schema.get("description", None)
 
-         # Construct the label widget that describes the input
+        # Construct the label widget that describes the input
         box = [widget]
         if label is not None or "title" in schema:
             # Extract the best guess for a title that we have
@@ -709,7 +709,15 @@ class Form:
             if tooltip is None:
                 tooltip = title
 
-            widget.description = title
+            # Prepend a label to the widget
+            box.insert(
+                0,
+                ipywidgets.Label(
+                    title,
+                    layout=ipywidgets.Layout(width="100%"),
+                ),
+            )
+
 
 
         def _validate_email(email):
@@ -770,12 +778,12 @@ class Form:
         return self._construct_email(schema, label=None, root=False)
     
     def _construct_hostname(self, schema, label=None, root=False):
-        HOSTNAME_REGEX = "^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$"
+        HOSTNAME_REGEX = r"^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$"
         widget = ipywidgets.Text()
         # Extract the best description that we have
         tooltip = schema.get("description", None)
 
-         # Construct the label widget that describes the input
+        # Construct the label widget that describes the input
         box = [widget]
         if label is not None or "title" in schema:
             # Extract the best guess for a title that we have
@@ -785,7 +793,15 @@ class Form:
             if tooltip is None:
                 tooltip = title
 
-            widget.description = title
+            # Prepend a label to the widget
+            box.insert(
+                0,
+                ipywidgets.Label(
+                    title,
+                    layout=ipywidgets.Layout(width="100%"),
+                ),
+            )
+
 
 
         def _validate_hostname(val):
@@ -844,12 +860,12 @@ class Form:
     def _construct_idn_hostname(self, schema, label=None, root=False):
         return self._construct_email(schema, label=None, root=False)
     def _construct_ipv4(self, schema, label=None, root=False):
-        IPV4_REGEX = r"^(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
+        IPV4_REGEX = r"^\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}$"
         widget = ipywidgets.Text()
         # Extract the best description that we have
         tooltip = schema.get("description", None)
 
-         # Construct the label widget that describes the input
+        # Construct the label widget that describes the input
         box = [widget]
         if label is not None or "title" in schema:
             # Extract the best guess for a title that we have
@@ -859,7 +875,15 @@ class Form:
             if tooltip is None:
                 tooltip = title
 
-            widget.description = title
+            # Prepend a label to the widget
+            box.insert(
+                0,
+                ipywidgets.Label(
+                    title,
+                    layout=ipywidgets.Layout(width="100%"),
+                ),
+            )
+
 
 
         def _validate_ipv4(ipv4):
@@ -922,7 +946,7 @@ class Form:
         # Extract the best description that we have
         tooltip = schema.get("description", None)
 
-         # Construct the label widget that describes the input
+        # Construct the label widget that describes the input
         box = [widget]
         if label is not None or "title" in schema:
             # Extract the best guess for a title that we have
@@ -932,7 +956,15 @@ class Form:
             if tooltip is None:
                 tooltip = title
 
-            widget.description = title
+            # Prepend a label to the widget
+            box.insert(
+                0,
+                ipywidgets.Label(
+                    title,
+                    layout=ipywidgets.Layout(width="100%"),
+                ),
+            )
+
 
 
         def _validate_ipv6(ipv6):
@@ -991,13 +1023,20 @@ class Form:
 
     #TODO: Simplify: all URIs are valid IRIs
     def _construct_uri(self, schema, label=None, root=False):
-        URI_REGEX_HTTP = r"^https?:\\/\\/(?:www\\.)?[-a-zA-Z0-9@:%._\\+~#=]{1,256}\\.[a-zA-Z0-9()]{1,6}\\b(?:[-a-zA-Z0-9()@:%_\\+.~#?&\\/=]*)$"
-        URI_REGEX_NOHTTP = r"^[-a-zA-Z0-9@:%._\\+~#=]{1,256}\\.[a-zA-Z0-9()]{1,6}\\b(?:[-a-zA-Z0-9()@:%_\\+.~#?&\\/=]*)$"
+        URI_REGEX = re.compile(
+                                r'^(?:[a-zA-Z][a-zA-Z0-9+.-]*):'  # Scheme (e.g., http, ftp, file)
+                                r'(?://(?:[a-zA-Z0-9\-._~%!$&\'()*+,;=]+@)?'  # Optional user info
+                                r'(?:\[[^\]]+\]|[a-zA-Z0-9\-._~%]+)'  # Host (IPv4, IPv6, or domain)
+                                r'(?::\d+)?)?'  # Optional port
+                                r'(?:/[a-zA-Z0-9\-._~%!$&\'()*+,;=:@]*)*'  # Path
+                                r'(?:\?[a-zA-Z0-9\-._~%!$&\'()*+,;=:@/?]*)?'  # Query
+                                r'(?:#[a-zA-Z0-9\-._~%!$&\'()*+,;=:@/?]*)?$'  # Fragment
+                            )
         widget = ipywidgets.Text()
         # Extract the best description that we have
         tooltip = schema.get("description", None)
 
-         # Construct the label widget that describes the input
+        # Construct the label widget that describes the input
         box = [widget]
         if label is not None or "title" in schema:
             # Extract the best guess for a title that we have
@@ -1007,11 +1046,18 @@ class Form:
             if tooltip is None:
                 tooltip = title
 
-            widget.description = title
+            # Prepend a label to the widget
+            box.insert(
+                0,
+                ipywidgets.Label(
+                    title,
+                    layout=ipywidgets.Layout(width="100%"),
+                ),
+            )
 
 
         def _validate_uri(val):
-            if re.fullmatch(URI_REGEX_HTTP, val) or re.fullmatch(URI_REGEX_NOHTTP, val):
+            if re.fullmatch(URI_REGEX, val):
                 return True
             return False
 
@@ -1063,21 +1109,21 @@ class Form:
             register_observer=_register_observer,
         )
     def _construct_iri(self, schema, label=None, root=False):
-        IRI_REGEX = r"""
-                    ^
-                    (?:[a-zA-Z][a-zA-Z0-9+.-]*):                              # Scheme
-                    (?://(?:[^\s/?#]*))?                                      # Authority (optional)
-                    (?:/[^\s?#]*)*                                            # Path
-                    (?:\?[^\s#]*)?                                            # Query (optional)
-                    (?:#[^\s]*)?                                              # Fragment (optional)
-                    $
-                    """
+        IRI_REGEX = re.compile(
+                                r'^(?:[a-zA-Z][a-zA-Z0-9+.-]*):'  # Scheme
+                                r'(?://(?:[^\s/?#@]+@)?'  # Optional user info
+                                r'(?:\[[^\]]+\]|[^\s/?#:]+)'  # Host (IPv6, domain, or Unicode)
+                                r'(?::\d+)?)?'  # Optional port
+                                r'(?:/[^\s?#]*)*'  # Path
+                                r'(?:\?[^\s#]*)?'  # Query
+                                r'(?:#[^\s]*)?$'  # Fragment
+                            )
         
         widget = ipywidgets.Text()
         # Extract the best description that we have
         tooltip = schema.get("description", None)
 
-         # Construct the label widget that describes the input
+        # Construct the label widget that describes the input
         box = [widget]
         if label is not None or "title" in schema:
             # Extract the best guess for a title that we have
@@ -1087,7 +1133,15 @@ class Form:
             if tooltip is None:
                 tooltip = title
 
-            widget.description = title
+            # Prepend a label to the widget
+            box.insert(
+                0,
+                ipywidgets.Label(
+                    title,
+                    layout=ipywidgets.Layout(width="100%"),
+                ),
+            )
+
 
 
         def _validate_iri(val):
@@ -1149,7 +1203,7 @@ class Form:
         # Extract the best description that we have
         tooltip = schema.get("description", None)
 
-         # Construct the label widget that describes the input
+        # Construct the label widget that describes the input
         box = [widget]
         if label is not None or "title" in schema:
             # Extract the best guess for a title that we have
@@ -1159,7 +1213,15 @@ class Form:
             if tooltip is None:
                 tooltip = title
 
-            widget.description = title
+            # Prepend a label to the widget
+            box.insert(
+                0,
+                ipywidgets.Label(
+                    title,
+                    layout=ipywidgets.Layout(width="100%"),
+                ),
+            )
+
 
 
         def _validate_uuid(val):
