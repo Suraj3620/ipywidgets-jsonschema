@@ -732,6 +732,9 @@ class Form:
         def _register_observer(h, n, t):
             widget.observe(h, names=n, type=t)
 
+        def _observer(data):
+            print(data)
+        widget.observe(_observer, names="value", type="change")
         def _setter(_d):
             print(_d)
             if _validate_email(_d):
@@ -748,6 +751,7 @@ class Form:
 
         def _getter():
             if not _validate_email(widget.value):
+                widget.layout.border = "2px red solid"
                 raise FormError(f"Value '{widget.value}' is not a valid email address")
             return widget.value
 
@@ -858,7 +862,7 @@ class Form:
         )
     
     def _construct_idn_hostname(self, schema, label=None, root=False):
-        return self._construct_email(schema, label=None, root=False)
+        return self._construct_hostname(schema, label=None, root=False)
     def _construct_ipv4(self, schema, label=None, root=False):
         IPV4_REGEX = r"^\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}$"
         widget = ipywidgets.Text()
