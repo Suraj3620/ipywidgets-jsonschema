@@ -14,8 +14,8 @@ import re
 import traitlets
 import collections.abc
 
-# regex_map.py
-REGEX_MAP = {
+
+REGEX_DICT = {
     "email": r'^[a-z0-9]+[\._]?[a-z0-9]+[@]\w+[.]\w+$',
     "idn-email": r'^[a-z0-9]+[\._]?[a-z0-9]+[@]\w+[.]\w+$',
     "hostname": r"^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$",
@@ -242,8 +242,8 @@ class Form:
             if (IS_VERSION_8 and format_ in SUPPORTED_FORMATS_VERSION_8) or (
                 not IS_VERSION_8 and format_ in SUPPORTED_FORMATS_VERSION_7
             ):
-                if format_ in REGEX_MAP:
-                    return self._construct_generic(schema, format_, REGEX_MAP[format_], label, root, default_value="")
+                if format_ in REGEX_DICT:
+                    return self._construct_generic(schema, REGEX_DICT[format_], label, root=root)
                 type_ = format_.replace("-", "_")
         return getattr(self, f"_construct_{type_}")(schema, label=label, root=root)
 
@@ -459,10 +459,22 @@ class Form:
             if pattern_checker(_d):
                 widget.value = _d
             else:
-                # We will have to see whether or not throwing is a good idea here
-                raise FormError(
-                    f"Value '{_d}' does not match the specified pattern '{schema['pattern']}'"
-                )
+                #Check if its a valid format
+                format_ = schema.get("format", None)
+                if format_ is not None:
+                    if format_ in REGEX_DICT:
+                        raise FormError(
+                            f"Value '{widget.value}' does not match the specified format'{schema['format']}'"
+                        )
+                    else:
+                        raise FormError(
+                            f"'{schema['format']}' is not a supported format."
+                        )
+                else:
+                    # We will have to see whether or not throwing is a good idea here
+                    raise FormError(
+                        f"Value '{_d}' does not match the specified pattern '{schema['pattern']}'"
+                    )
 
         def _resetter():
             # Apply a potential default
@@ -477,10 +489,21 @@ class Form:
 
         def _getter():
             if not pattern_checker(widget.value):
+                format_ = schema.get("format", None)
+                if format_ is not None:
+                    if format_ in REGEX_DICT:
+                        raise FormError(
+                            f"Value '{widget.value}' does not match the specified format'{schema['format']}'"
+                        )
+                    else:
+                        raise FormError(
+                            f"'{schema['format']}' is not a supported format."
+                        )
+                else:
                 # We will have to see whether or not throwing is a good idea here
-                raise FormError(
-                    f"Value '{widget.value}' does not match the specified pattern '{schema['pattern']}'"
-                )
+                    raise FormError(
+                        f"Value '{widget.value}' does not match the specified pattern '{schema['pattern']}'"
+                    )
 
             return widget.value
 
@@ -702,59 +725,9 @@ class Form:
             register_observer=_register_observer,
         )
 
-    def _construct_generic(self, schema, format, regex=None, label=None, root=False, default_value=""):
-       
-
-
-        widget = ipywidgets.Text()
-        tooltip = schema.get("description", None)
-        box = [widget]
-        if label is not None or "title" in schema:
-            title = schema.get("title", label)
-            if tooltip is None:
-                tooltip = title
-            box.insert(0, ipywidgets.Label(title, layout=ipywidgets.Layout(width="100%")))
-        if tooltip is not None:
-            widget.tooltip = tooltip
-
-        def _validate(value):
-            if regex and not re.fullmatch(regex, value):
-                return False
-            return True
-
-        def _register_observer(h, n, t):
-            widget.observe(h, names=n, type=t)
-
-        def _setter(_d):
-            if _validate(_d):
-                widget.value = _d
-            else:
-                raise FormError(f"Value '{_d}' is not a valid {format}")
-
-        def _resetter():
-            if "default" in schema:
-                widget.value = schema.get("default", default_value)
-            else:
-                widget.value = default_value
-
-        def _getter():
-            if not _validate(widget.value):
-                raise FormError(f"Value '{widget.value}' is not a valid {format}")
-            return widget.value
-
-        _resetter()
-        widget.layout = ipywidgets.Layout(width="100%")
-        box_type = ipywidgets.HBox if not self.vertically_place_labels else ipywidgets.VBox
-        box = box_type(box, layout=ipywidgets.Layout(width="100%"))
-        box = self._wrap_description(box, tooltip)
-
-        return self.construct_element(
-            getter=_getter,
-            setter=_setter,
-            resetter=_resetter,
-            widgets=[box],
-            register_observer=_register_observer,
-        )
+    def _construct_generic(self, schema, regex=None, label=None, root=False):
+        schema["pattern"] = regex
+        return self._construct_simple(schema, ipywidgets.Text(), label=label, root=root)
 
     
     def _construct_number(self, schema, label=None, root=False):
